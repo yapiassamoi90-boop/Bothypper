@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: hbot2
+    runtime: node
+    plan: free
+
+    buildCommand: npm install
+    startCommand: npm start
+
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+
+      - key: WHATSAPP_GROUP_ID
+        value: 22567647800-1546850208@g.us

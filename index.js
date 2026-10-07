@@ -415,7 +415,7 @@ Si quelqu'un demande :
 - Qui est ton créateur ?
 - Qui est ton concepteur ?
 
-Tu dois répondre clairement que tu as été conçu
+Tu dois répondre clairement que tu đã été conçu
 par ${CREATOR_NAME}.
 
 Tu ne dois jamais inventer un autre créateur.
@@ -551,9 +551,6 @@ async function memoriserGroupe(
 
     });
 
-
-    // Maximum de mémoire brute
-    // conservée pour ce groupe
 
     if (
       data.informations.length > 500
@@ -1428,987 +1425,129 @@ ${webText}
 // NORMALISATION MESSAGE
 // ============================================================
 
-function normaliserMessage(
-  msg
-) {
-
-  let message =
-    msg?.message;
-
-  if (!message) {
-
-    return null;
-
-  }
-
-
-  if (
-    message.ephemeralMessage?.message
-  ) {
-
-    message =
-      message.ephemeralMessage.message;
-
-  }
-
-
-  if (
-    message.viewOnceMessage?.message
-  ) {
-
-    message =
-      message.viewOnceMessage.message;
-
-  }
-
-
-  if (
-    message.viewOnceMessageV2?.message
-  ) {
-
-    message =
-      message.viewOnceMessageV2.message;
-
-  }
-
-
-  return message;
-
+function normaliserMessage(msg) {
+  const text =
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    msg.message?.imageMessage?.caption ||
+    msg.message?.videoMessage?.caption ||
+    '';
+  return text.trim();
 }
 
 
 // ============================================================
-// TEXTE
+// LANCEMENT DE WHATSAPP (BAILEYS)
 // ============================================================
 
-function extraireTexte(
-  msg
-) {
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+  const { version } = await fetchLatestBaileysVersion();
 
-  const message =
-    normaliserMessage(msg);
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pino({ level: 'silent' })
+  });
 
-  if (!message) {
+  sockInstance = sock;
 
-    return '';
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
-  }
+    if (qr) {
+      currentQrImage = await QRCode.toDataURL(qr);
+      console.log('📱 Nouveau QR Code généré (flashe-le depuis la page web).');
+    }
 
+    if (connection === 'open') {
+      isConnected = true;
+      currentQrImage = null;
+      reconnecting = false;
+      console.log('✅ Hbot2 est connecté à WhatsApp !');
+    }
 
-  return (
+    if (connection === 'close') {
+      isConnected = false;
+      sockInstance = null;
 
-    message.conversation ||
+      const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-    message.extendedTextMessage?.text ||
+      console.log(`⚠️ Connexion fermée (Code: ${statusCode}). Reconnexion : ${shouldReconnect}`);
 
-    message.imageMessage?.caption ||
-
-    message.videoMessage?.caption ||
-
-    ''
-
-  ).trim();
-
-}
-
-
-// ============================================================
-// AUDIO
-// ============================================================
-
-function extraireAudio(
-  msg
-) {
-
-  const message =
-    normaliserMessage(msg);
-
-  return (
-    message?.audioMessage ||
-    null
-  );
-
-}
-
-
-// ============================================================
-// COMMANDES
-// ============================================================
-
-async function traiterCommande(
-  jid,
-  text,
-  msg
-) {
-
-  const command =
-    text.trim().toLowerCase();
-
-
-  if (
-    command === '!help' ||
-    command === '!aide'
-  ) {
-
-    await sockInstance.sendMessage(
-
-      jid,
-
-      {
-
-        text: `
-
-🤖 *HBOT2 — AIDE*
-
-👤 Créateur :
-*Assamoi Yapi Hyppolite*
-
-💬 Je peux répondre à tes questions.
-
-🌐 Je peux rechercher des informations
-récentes sur Internet.
-
-🧠 Dans les groupes, je peux mémoriser
-les informations importantes.
-
-🎙️ Tu peux m'envoyer des vocaux.
-
-🔊 Je peux répondre vocalement.
-
-Commandes :
-
-!help
-!aide
-!id
-!createur
-!hbot2
-!resetia
-
-Dans un groupe, adresse-toi à moi
-avec le mot :
-
-Hbot2
-
-`
-
-      },
-
-      {
-        quoted: msg
+      if (shouldReconnect && !reconnecting) {
+        reconnecting = true;
+        setTimeout(() => startBot(), 5000);
+      } else {
+        console.log('❌ Déconnecté définitivement de WhatsApp. Supprime le dossier de session pour relancer.');
       }
-
-    );
-
-    return true;
-
-  }
-
-
-  if (command === '!id') {
-
-    await sockInstance.sendMessage(
-
-      jid,
-
-      {
-
-        text:
-          `🆔 Identifiant de cette conversation :\n\n${jid}`
-
-      },
-
-      {
-        quoted: msg
-      }
-
-    );
-
-    return true;
-
-  }
-
-
-  if (
-    command === '!createur' ||
-    command === '!hbot2'
-  ) {
-
-    await sockInstance.sendMessage(
-
-      jid,
-
-      {
-
-        text:
-          `🤖 Je suis Hbot2.\n\n` +
-          `👤 J'ai été conçu par ` +
-          `Assamoi Yapi Hyppolite.`
-
-      },
-
-      {
-        quoted: msg
-      }
-
-    );
-
-    return true;
-
-  }
-
-
-  if (command === '!resetia') {
-
-    conversations.delete(jid);
-
-    await sockInstance.sendMessage(
-
-      jid,
-
-      {
-
-        text:
-          '🧠 La mémoire courte de cette conversation a été réinitialisée.'
-
-      },
-
-      {
-        quoted: msg
-      }
-
-    );
-
-    return true;
-
-  }
-
-
-  return false;
-
-}
-
-
-// ============================================================
-// CONNEXION WHATSAPP
-// ============================================================
-
-async function connecterWhatsApp() {
-
-  if (reconnecting) {
-
-    return;
-
-  }
-
-  reconnecting = true;
-
-
-  try {
-
-    const {
-      state,
-      saveCreds
-    } =
-      await useMultiFileAuthState(
-        'auth_info_baileys_hbot2'
-      );
-
-
-    const {
-      version
-    } =
-      await fetchLatestBaileysVersion();
-
-
-    const sock =
-      makeWASocket({
-
-        version,
-
-        auth:
-          state,
-
-        logger:
-          pino({
-            level: 'silent'
-          }),
-
-        printQRInTerminal:
-          false,
-
-        browser: [
-          'Hbot2',
-          'Chrome',
-          '1.0.0'
-        ]
-
-      });
-
-
-    sockInstance =
-      sock;
-
-
-    sock.ev.on(
-      'creds.update',
-      saveCreds
-    );
-
-
-    sock.ev.on(
-      'connection.update',
-      async update => {
-
-        const {
-          connection,
-          lastDisconnect,
-          qr
-        } = update;
-
-
-        if (qr) {
-
-          try {
-
-            currentQrImage =
-              await QRCode.toDataURL(
-                qr
-              );
-
-            console.log(
-              '📱 QR disponible sur /'
-            );
-
-          } catch (error) {
-
-            console.error(
-              '❌ QR :',
-              error.message
-            );
-
-          }
-
-        }
-
-
-        if (connection === 'open') {
-
-          isConnected =
-            true;
-
-          currentQrImage =
-            null;
-
-          reconnecting =
-            false;
-
-          console.log(
-            '✅ HBOT2 CONNECTÉ À WHATSAPP'
+    }
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+
+    for (const msg of messages) {
+      if (!msg.message || msg.key.fromMe) continue;
+
+      const jid = msg.key.remoteJid;
+      const pushName = msg.pushName || 'Utilisateur';
+      const text = normaliserMessage(msg);
+      const isGroup = jid.endsWith('@g.us');
+
+      let userQuery = text;
+      const audioMessage = msg.message.audioMessage;
+
+      if (audioMessage) {
+        try {
+          console.log(`🎙️ Réception d'un message audio de ${pushName}...`);
+          const buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            {},
+            { logger: pino({ level: 'silent' }) }
           );
-
-        }
-
-
-        if (connection === 'close') {
-
-          isConnected =
-            false;
-
-          currentQrImage =
-            null;
-
-
-          const statusCode =
-            new Boom(
-              lastDisconnect?.error
-            )?.output?.statusCode;
-
-
-          if (
-            statusCode ===
-            DisconnectReason.loggedOut
-          ) {
-
-            console.log(
-              '❌ Session WhatsApp déconnectée.'
-            );
-
-            reconnecting =
-              false;
-
-            return;
-
+          const transcribedText = await transcrireAudio(buffer, audioMessage.mimetype);
+          if (transcribedText) {
+            userQuery = transcribedText;
+            console.log(`📝 Transcription : "${userQuery}"`);
           }
-
-
-          reconnecting =
-            false;
-
-
-          console.log(
-            '🔄 Reconnexion dans 5 secondes...'
-          );
-
-
-          setTimeout(
-            connecterWhatsApp,
-            5000
-          );
-
+        } catch (err) {
+          console.error('❌ Erreur téléchargement/transcription audio :', err.message);
         }
-
-      }
-    );
-
-
-    // ========================================================
-    // MESSAGES
-    // ========================================================
-
-    sock.ev.on(
-      'messages.upsert',
-      async ({
-        messages,
-        type
-      }) => {
-
-        if (type !== 'notify') {
-
-          return;
-
-        }
-
-
-        for (const msg of messages) {
-
-          try {
-
-            if (!msg.message) {
-
-              continue;
-
-            }
-
-
-            if (msg.key.fromMe) {
-
-              continue;
-
-            }
-
-
-            const jid =
-              msg.key.remoteJid;
-
-
-            if (!jid) {
-
-              continue;
-
-            }
-
-
-            if (
-              jid ===
-              'status@broadcast'
-            ) {
-
-              continue;
-
-            }
-
-
-            const isGroup =
-              jid.endsWith('@g.us');
-
-
-            let text =
-              extraireTexte(msg);
-
-
-            const audio =
-              extraireAudio(msg);
-
-
-            let isVoice =
-              false;
-
-
-            // ==================================================
-            // VOCAL
-            // ==================================================
-
-            if (audio) {
-
-              console.log(
-                `🎙️ Vocal reçu : ${jid}`
-              );
-
-
-              try {
-
-                await sock.sendPresenceUpdate(
-                  'recording',
-                  jid
-                );
-
-
-                const buffer =
-                  await downloadMediaMessage(
-
-                    msg,
-
-                    'buffer',
-
-                    {},
-
-                    {
-
-                      logger:
-                        pino({
-                          level: 'silent'
-                        }),
-
-                      reuploadRequest:
-                        sock.updateMediaMessage
-
-                    }
-
-                  );
-
-
-                const transcription =
-                  await transcrireAudio(
-
-                    buffer,
-
-                    audio.mimetype
-
-                  );
-
-
-                if (!transcription) {
-
-                  await sock.sendMessage(
-
-                    jid,
-
-                    {
-
-                      text:
-                        '🎙️ Je n’ai pas réussi à comprendre ton vocal.'
-
-                    },
-
-                    {
-                      quoted: msg
-                    }
-
-                  );
-
-                  continue;
-
-                }
-
-
-                text =
-                  transcription;
-
-                isVoice =
-                  true;
-
-
-                console.log(
-                  `📝 ${text}`
-                );
-
-
-              } catch (error) {
-
-                console.error(
-                  '❌ Traitement vocal :',
-                  error.message
-                );
-
-
-                await sock.sendMessage(
-
-                  jid,
-
-                  {
-
-                    text:
-                      '⚠️ Je n’ai pas pu traiter ton vocal.'
-
-                  },
-
-                  {
-                    quoted: msg
-                  }
-
-                );
-
-                continue;
-
-              }
-
-            }
-
-
-            if (!text) {
-
-              continue;
-
-            }
-
-
-            // ==================================================
-            // GROUPE
-            // ==================================================
-
-            if (isGroup) {
-
-              const mention =
-                /hbot2/i.test(text);
-
-
-              // Hbot2 observe les conversations
-              // mais ne répond pas sans qu'on l'appelle.
-
-              if (!mention) {
-
-                const important =
-                  await analyserInformation(
-                    text
-                  );
-
-
-                if (important) {
-
-                  const participant =
-                    msg.key.participant ||
-                    msg.key.remoteJid;
-
-
-                  await memoriserGroupe(
-
-                    jid,
-
-                    text,
-
-                    participant
-
-                  );
-
-                }
-
-
-                continue;
-
-              }
-
-
-              text =
-                text
-                  .replace(
-                    /hbot2/gi,
-                    ''
-                  )
-                  .trim();
-
-
-              if (!text) {
-
-                text =
-                  'Oui, je t’écoute.';
-
-              }
-
-            }
-
-
-            // ==================================================
-            // COMMANDES
-            // ==================================================
-
-            if (
-              text.startsWith('!')
-            ) {
-
-              const done =
-                await traiterCommande(
-
-                  jid,
-
-                  text,
-
-                  msg
-
-                );
-
-
-              if (done) {
-
-                continue;
-
-              }
-
-            }
-
-
-            // ==================================================
-            // MEMOIRE DU GROUPE
-            // ==================================================
-
-            let groupMemory = [];
-
-
-            if (isGroup) {
-
-              groupMemory =
-                await recupererMemoireGroupe(
-                  jid
-                );
-
-            }
-
-
-            // ==================================================
-            // RECHERCHE INTERNET
-            // ==================================================
-
-            let webData =
-              null;
-
-
-            const needsWeb =
-              await questionNecessiteWeb(
-                text
-              );
-
-
-            if (
-              needsWeb &&
-              TAVILY_API_KEY
-            ) {
-
-              console.log(
-                `🌐 Recherche Web : ${text}`
-              );
-
-
-              webData =
-                await rechercherInternet(
-                  text
-                );
-
-            }
-
-
-            // ==================================================
-            // REPONSE IA
-            // ==================================================
-
-            await sock.sendPresenceUpdate(
-              'composing',
-              jid
-            );
-
-
-            const response =
-              await genererIA(
-
-                jid,
-
-                text,
-
-                groupMemory,
-
-                webData
-
-              );
-
-
-            await sock.sendPresenceUpdate(
-              'paused',
-              jid
-            );
-
-
-            // ==================================================
-            // MEMORISATION D'UNE NOUVELLE INFO
-            // ==================================================
-
-            if (isGroup) {
-
-              const important =
-                await analyserInformation(
-                  text
-                );
-
-
-              if (important) {
-
-                const participant =
-                  msg.key.participant ||
-                  msg.key.remoteJid;
-
-
-                await memoriserGroupe(
-
-                  jid,
-
-                  text,
-
-                  participant
-
-                );
-
-              }
-
-            }
-
-
-            // ==================================================
-            // REPONSE VOCALE
-            // ==================================================
-
-            if (isVoice) {
-
-              const sent =
-                await envoyerVocal(
-
-                  jid,
-
-                  response,
-
-                  msg
-
-                );
-
-
-              if (sent) {
-
-                console.log(
-                  '🔊 Réponse vocale envoyée'
-                );
-
-                continue;
-
-              }
-
-            }
-
-
-            // ==================================================
-            // REPONSE ECRITE
-            // ==================================================
-
-            await sock.sendMessage(
-
-              jid,
-
-              {
-
-                text:
-                  response
-
-              },
-
-              {
-                quoted: msg
-              }
-
-            );
-
-
-          } catch (error) {
-
-            console.error(
-              '❌ Message :',
-              error.message
-            );
-
-          }
-
-        }
-
       }
 
-    );
+      if (!userQuery) continue;
 
+      if (isGroup) {
+        const estImportant = await analyserInformation(userQuery);
+        if (estImportant) {
+          await memoriserGroupe(jid, userQuery, pushName);
+        }
+      }
 
-  } catch (error) {
+      let webData = null;
+      const besoinWeb = await questionNecessiteWeb(userQuery);
+      if (besoinWeb && TAVILY_API_KEY) {
+        console.log(`🌐 Recherche Web pour : "${userQuery}"`);
+        webData = await rechercherInternet(userQuery);
+      }
 
-    console.error(
-      '❌ Connexion WhatsApp :',
-      error.message
-    );
+      const groupMemory = isGroup ? await recupererMemoireGroupe(jid) : [];
 
+      const replyText = await genererIA(jid, userQuery, groupMemory, webData);
 
-    reconnecting =
-      false;
+      if (audioMessage && VOICE_REPLY_ENABLED) {
+        const sentVoice = await envoyerVocal(jid, replyText, msg);
+        if (sentVoice) continue;
+      }
 
-
-    setTimeout(
-      connecterWhatsApp,
-      10000
-    );
-
-  }
-
+      await sock.sendMessage(jid, { text: replyText }, { quoted: msg });
+    }
+  });
 }
 
-
-// ============================================================
-// DEMARRAGE
-// ============================================================
-
-connecterWhatsApp();
-
-
-console.log(`
-
-==================================================
-                 🤖 HBOT2
-==================================================
-
-👤 Créateur :
-${CREATOR_NAME}
-
-🧠 IA :
-${GROQ_MODEL}
-
-🎙️ Whisper :
-${WHISPER_MODEL}
-
-🔊 ElevenLabs :
-${ELEVENLABS_MODEL}
-
-🌐 Recherche Internet :
-${TAVILY_API_KEY ? 'ACTIVE' : 'INACTIVE'}
-
-🔥 Mémoire Firestore :
-${db ? 'ACTIVE' : 'INACTIVE'}
-
-👥 Groupes :
-Tous les groupes
-
-📌 WHATSAPP_GROUP_ID :
-NON UTILISÉ
-
-📢 Rappels automatiques :
-NON
-
-💬 Réponses écrites :
-OUI
-
-🎙️ Réception vocale :
-OUI
-
-🔊 Réponses vocales :
-OUI
-
-==================================================
-
-`);
+startBot().catch((err) => console.error('❌ Erreur démarrage bot :', err));

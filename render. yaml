@@ -1,8 +1,0 @@
-   services:
-     - type: web
-       name: Bothypper
-       env: node
-       plan: free
-       rootDir: .
-       buildCommand: npm install
-       startCommand: node index.js

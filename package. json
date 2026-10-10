@@ -1,22 +1,26 @@
+
 {
   "name": "hbot2",
-  "version": "4.0.0",
-  "description": "Hbot2 - Assistant WhatsApp intelligent avec mémoire, Groq, Tavily, Firebase, Whisper et ElevenLabs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot WhatsApp Hbot2 avec IA, mémoire de groupe, recherche web et voix",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "check": "node --check index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.18",
-    "express": "^4.19.2",
-    "firebase-admin": "^12.7.0",
-    "groq-sdk": "^0.19.0",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "groq-sdk": "^0.30.0",
+    "ffmpeg-static": "^5.2.0",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4"
-  },
-  "engines": {
-    "node": ">=18"
   }
 }
